@@ -1,3 +1,4 @@
+import calendar
 import datetime
 import json
 import threading
@@ -53,7 +54,7 @@ def ejecuta_exposicion(command):
 
 def on_command_init(topic, payload):
     json_payload = json.loads(payload)
-    command = f"INIT {json_payload['x']} {json_payload['y']}"
+    command = f"INIT {json_payload['binX']} {json_payload['binY']}"
     send_command(command)
 
 def send_command(command):
@@ -68,12 +69,15 @@ def send_command(command):
 
 def monitor_temperatura():
     while True:
-        dt = datetime.datetime.now(timezone.utc)
+        current_utc_time = datetime.datetime.utcnow()
+        #unix_timestamp = int(time.mktime(current_utc_time.timetuple()))
+        unix_timestamp = calendar.timegm(current_utc_time.timetuple())
+
         result = send_command("TEMP")
 
         json_result = {
             "valor": result,
-            "tz": dt.timestamp()
+            "tz": unix_timestamp
         }
 
         # Publicar a MQTT
