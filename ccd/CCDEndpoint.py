@@ -1,9 +1,12 @@
+import datetime
 import json
 import threading
 import time
 import socket
 import paho.mqtt.client as mqtt
 import paho.mqtt.publish as publish
+
+from datetime import timezone
 
 # Configuracion MQTT
 MQTT_BROKER = '127.0.0.1'
@@ -63,6 +66,22 @@ def send_command(command):
         print(f'Received: {response}')
     return response
 
+def monitor_temperatura():
+    while True:
+        dt = datetime.datetime.now(timezone.utc)
+        result = send_command("TEMP")
+
+        json_result = {
+            "valor": result,
+            "tz": dt.timestamp()
+        }
+
+        # Publicar a MQTT
+        publish.single(topic=MQTT_PUBLISH_TEMP, payload=json.dumps(json_result), hostname=MQTT_BROKER, port=MQTT_PORT)
+
+        # Delay
+        time.sleep(5)
+
 # Init MQTT
 mqtt_client = mqtt.Client()
 mqtt_client.on_connect = on_connect
@@ -73,5 +92,8 @@ mqtt_client.connect(MQTT_BROKER, MQTT_PORT)
 mqtt_thread = threading.Thread(target=mqtt_client.loop_forever)
 mqtt_thread.start()
 
+temp_thread = threading.Thread(target=monitor_temperatura)
+temp_thread.start()
 
 mqtt_thread.join()
+temp_thread.join()

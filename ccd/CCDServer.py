@@ -46,7 +46,8 @@ class CCDServer:
 
     async def get_temp(self):
         async with self.lock:
-            return random.uniform(-110, -105)
+            raw = random.uniform(-110, -105)
+            return f"{round(raw, 2)}"
 
     async def _simulate_exposure(self, time):
         for i in range(100):
@@ -84,8 +85,7 @@ async def handle_client(reader, writer, ccd_server):
         elif message == "TEMP":
             response = await ccd_server.get_temp()
 
-        z = response.encode() + b'\n'
-        writer.write(response.encode() + b'\n')
+        writer.write(response.encode('UTF-8') + b'\n')
         await writer.drain()
 
     writer.close()
