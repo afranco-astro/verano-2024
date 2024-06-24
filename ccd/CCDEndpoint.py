@@ -44,18 +44,23 @@ def ejecuta_exposicion(command):
     response = send_command(command)
     task_id = response.split()[-1]
     progress = 0
+
+    publish_status()
     while progress < 100:
         time.sleep(1)
         # Preguntamos al CCD_Server el progreso
         resp = send_command(f'PROGRESO {task_id}')
         progress = int(resp)
         # Publicar a MQTT
-        publish.single(topic=MQTT_PUBLISH_PROGRESS, payload=progress, hostname=MQTT_BROKER, port=MQTT_PORT)
+        publish.single(topic=MQTT_PUBLISH_PROGRESS, payload=progress, hostname=MQTT_BROKER, port=MQTT_PORT, retain=True)
+
+    publish_status()
 
 def on_command_init(topic, payload):
     json_payload = json.loads(payload)
     command = f"INIT {json_payload['binX']} {json_payload['binY']}"
     send_command(command)
+    publish_status()
 
 def send_command(command):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -81,10 +86,18 @@ def monitor_temperatura():
         }
 
         # Publicar a MQTT
-        publish.single(topic=MQTT_PUBLISH_TEMP, payload=json.dumps(json_result), hostname=MQTT_BROKER, port=MQTT_PORT)
+        publish.single(topic=MQTT_PUBLISH_TEMP, payload=json.dumps(json_result), hostname=MQTT_BROKER, port=MQTT_PORT, retain=True)
 
         # Delay
         time.sleep(5)
+
+def publish_status():
+    status = send_command("STATUS")
+    payload = {
+        "estado": status
+    }
+
+    publish.single(topic=MQTT_PUBLISH_STATUS, payload=json.dumps(payload), hostname=MQTT_BROKER, port=MQTT_PORT, retain=True)
 
 # Init MQTT
 mqtt_client = mqtt.Client()

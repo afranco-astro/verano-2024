@@ -42,7 +42,7 @@ class CCDServer:
 
     async def get_status(self):
         async with self.lock:
-            return f"Status: {self.status}"
+            return f"{self.status}"
 
     async def get_temp(self):
         async with self.lock:
