@@ -46,7 +46,7 @@ class CCDServer:
 
     async def get_temp(self):
         async with self.lock:
-            raw = random.uniform(-110, -105)
+            raw = random.uniform(-120, -105)
             return f"{round(raw, 2)}"
 
     async def _simulate_exposure(self, time):
