@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timedelta
 
 import astropy.units as u
-from astropy.coordinates import EarthLocation, AltAz, SkyCoord, Angle
+from astropy.coordinates import EarthLocation, AltAz, SkyCoord, Angle, ICRS
 from astropy.time import Time
 
 import paho.mqtt.client as mqtt
@@ -21,7 +21,7 @@ MQTT_PUBLISH_POSITION = "telescopio/tel84/instrumentos/consola/posicion"
 
 move_to_zenith = False
 move_to_position = False
-sky_coord = None
+sky_coord = { }
 
 # Coordenadas del telescopio en la Sierra de San Pedro Martir
 location = EarthLocation(lat=31.0456*u.deg, lon=-115.4545*u.deg, height=2800*u.m)
@@ -39,16 +39,15 @@ def on_message(client, userdata, message):
 
 def on_command_zenith(topic):
     time_now = Time(datetime.utcnow())
-    global sky_coord
-    sky_coord = SkyCoord(alt=90*u.deg, az=0*u.deg, frame=AltAz(obstime=time_now, location=location))
-
     global move_to_zenith
     move_to_zenith = True
 
 def on_command_move(topic, payload):
     json_payload = json.loads(payload)
     global sky_coord
-    sky_coord = SkyCoord(ra=json_payload['ar'], dec=json_payload['dec'], frame='icrs')
+    sky_coord['ra'] = str(json_payload['ar'])
+    sky_coord['dec'] = str(json_payload['dec'])
+    #sky_coord = SkyCoord(ra=json_payload['ar'], dec=json_payload['dec'])
 
     global move_to_position
     move_to_position = True
@@ -56,23 +55,10 @@ def on_command_move(topic, payload):
     global move_to_zenith
     move_to_zenith = False
 
-
 def calculate_star_position(star, time_now):
     # Calcular la altitud y azimut de la estrella
     altaz = star.transform_to(AltAz(obstime=time_now, location=location))
     return altaz.alt.degree, altaz.az.degree
-
-def format_ra_dec(coord):
-    ra = coord.ra.to_string(unit=u.hour, sep=':', precision=3)  # Milisegundos de hora
-    dec = coord.dec.to_string(unit=u.degree, sep=':', precision=2)  # Centésimas de grado
-    return ra, dec
-
-def format_alt_az(alt, az):
-    alt_angle = Angle(alt, unit=u.deg)
-    az_angle = Angle(az, unit=u.deg)
-    alt_hms = alt_angle.to_string(unit=u.hour, sep=':', precision=2)
-    az_hms = az_angle.to_string(unit=u.hour, sep=':', precision=2)
-    return alt_hms, az_hms
 
 def run_consola():
     while True:
@@ -80,23 +66,28 @@ def run_consola():
         time_now = Time(datetime.utcnow())
 
         if move_to_zenith:
-            zenith_coord = SkyCoord(alt=90*u.deg, az=0*u.deg, frame=AltAz(obstime=time_now, location=location))
-            altitude, azimuth = calculate_star_position(zenith_coord, time_now)
-            alt_hms, az_hms = format_alt_az(altitude, azimuth)
-            #ra, dec = format_ra_dec(zenith_coord)
-
+            zenith_altaz = SkyCoord(alt=90*u.deg, az=0*u.deg, frame=AltAz(obstime=time_now, location=location))
+            zenith_equatorial = zenith_altaz.transform_to('icrs')
             payload = {
-                'altitude': alt_hms,
-                'azimuth': az_hms
+                'altitude': f"{zenith_altaz.alt.degree:.2f}°",
+                'azimuth': f"{zenith_altaz.az.degree:.2f}°",
+                'ra': f"{zenith_equatorial.ra.to_string(u.hour)}",
+                'dec': f"{zenith_equatorial.dec.to_string(u.degree)}",
+                'time': f"{time_now.iso}"
             }
             publish.single(topic=MQTT_PUBLISH_POSITION, payload=json.dumps(payload), hostname=MQTT_BROKER, port=MQTT_PORT, retain=True)
         elif move_to_position:
-            altitude, azimuth = calculate_star_position(sky_coord, time_now)
-            alt_hms, az_hms = format_alt_az(altitude, azimuth)
-            #ra, dec = format_ra_dec(sky_coord)
+            ra_value = str(sky_coord['ra'])
+            dec_value = str(sky_coord['dec'])
+            object_coord = SkyCoord(ra=ra_value, dec=dec_value)
+            altaz_frame = AltAz(obstime=time_now, location=location)
+            object_altaz = object_coord.transform_to(altaz_frame)
             payload = {
-                'altitude': alt_hms,
-                'azimuth': az_hms
+                'altitude': f"{object_altaz.alt.degree:.2f}°",
+                'azimuth': f"{object_altaz.az.degree:.2f}°",
+                'ra': f"{object_coord.ra.to_string(u.hour)}",
+                'dec': f"{object_coord.dec.to_string(u.degree)}",
+                'time': f"{time_now.iso}"
             }
             publish.single(topic=MQTT_PUBLISH_POSITION, payload=json.dumps(payload), hostname=MQTT_BROKER, port=MQTT_PORT, retain=True)
 
